@@ -1,226 +1,133 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Footer } from './components/Footer';
-import { AppPage, Header } from './components/Header';
-import { WhatsAppFloat } from './components/WhatsAppFloat';
-import { EstateProvider, useEstate } from './context/EstateContext';
-import { AboutPage } from './pages/AboutPage';
-import { AdminDashboardPage } from './pages/AdminDashboardPage';
-import { ContactPage } from './pages/ContactPage';
-import { GalleryPage } from './pages/GalleryPage';
-import { HomePage } from './pages/HomePage';
-import { LegalPage } from './pages/LegalPage';
-import { MapPage } from './pages/MapPage';
-import { PlotDetailsPage } from './pages/PlotDetailsPage';
-import { PlotsListPage } from './pages/PlotsListPage';
-import { ReviewsPage } from './pages/ReviewsPage';
-import { SiteVisitPage } from './pages/SiteVisitPage';
-import type { PlotFilters, PlotItem } from './types/estate';
+import { BusFront, SearchX } from 'lucide-react';
+import Header from './components/Header';
+import Footer from './components/Footer';
+import WhatsAppFloat from './components/WhatsAppFloat';
+import { EmptyState } from './components/ui';
+import { RouterProvider, matchPath, useRouter, Link } from './lib/router';
+import { I18nProvider } from './lib/i18n';
+import { ToastProvider } from './lib/toast';
+import { SiteProvider } from './lib/site';
+import { AuthProvider } from './lib/auth';
 
-function parseLocationRoute(pathname: string): {
-  page: AppPage;
-  plotCode?: string;
-} {
-  const clean = pathname.replace(/\/+$/, '') || '/';
-  if (clean === '/') return { page: 'home' };
-  if (clean === '/about') return { page: 'about' };
-  if (clean === '/plots') return { page: 'plots' };
-  if (clean.startsWith('/plots/')) {
-    return { page: 'plot-details', plotCode: decodeURIComponent(clean.slice('/plots/'.length)) };
-  }
-  if (clean === '/gallery') return { page: 'gallery' };
-  if (clean === '/map') return { page: 'map' };
-  if (clean === '/site-visit') return { page: 'site-visit' };
-  if (clean === '/reviews') return { page: 'reviews' };
-  if (clean === '/contact') return { page: 'contact' };
-  if (clean === '/privacy') return { page: 'privacy' };
-  if (clean === '/terms') return { page: 'terms' };
-  if (clean === '/admin') return { page: 'admin' };
-  return { page: 'home' };
-}
+import HomePage from './pages/HomePage';
+import SearchPage from './pages/SearchPage';
+import BusListPage from './pages/BusListPage';
+import SeatSelectionPage from './pages/SeatSelectionPage';
+import PassengerDetailsPage from './pages/PassengerDetailsPage';
+import PaymentPage from './pages/PaymentPage';
+import ConfirmationPage from './pages/ConfirmationPage';
+import MyBookingsPage from './pages/MyBookingsPage';
+import BookingDetailPage from './pages/BookingDetailPage';
+import AuthPage from './pages/AuthPage';
+import AccountPage from './pages/AccountPage';
+import AboutPage from './pages/AboutPage';
+import ContactPage from './pages/ContactPage';
+import FaqPage from './pages/FaqPage';
+import LegalPage from './pages/LegalPage';
 
-function pageToPath(page: AppPage, plot?: PlotItem | null): string {
-  switch (page) {
-    case 'home':
-      return '/';
-    case 'about':
-      return '/about';
-    case 'plots':
-      return '/plots';
-    case 'plot-details':
-      return plot ? `/plots/${encodeURIComponent(plot.plotCode)}` : '/plots';
-    case 'gallery':
-      return '/gallery';
-    case 'map':
-      return '/map';
-    case 'site-visit':
-      return '/site-visit';
-    case 'reviews':
-      return '/reviews';
-    case 'contact':
-      return '/contact';
-    case 'privacy':
-      return '/privacy';
-    case 'terms':
-      return '/terms';
-    case 'admin':
-      return '/admin';
-  }
-}
+import AdminLayout from './pages/admin/AdminLayout';
+import AdminLoginPage from './pages/admin/AdminLoginPage';
+import AdminDashboardPage from './pages/admin/AdminDashboardPage';
+import AdminBookingsPage from './pages/admin/AdminBookingsPage';
+import AdminFleetPage from './pages/admin/AdminFleetPage';
+import AdminRoutesPage from './pages/admin/AdminRoutesPage';
+import AdminCustomersPage from './pages/admin/AdminCustomersPage';
+import AdminCouponsPage from './pages/admin/AdminCouponsPage';
+import AdminReviewsPage from './pages/admin/AdminReviewsPage';
+import AdminContentPage from './pages/admin/AdminContentPage';
+import AdminReportsPage from './pages/admin/AdminReportsPage';
 
-const EstateAppShell: React.FC = () => {
-  const { settings, plots, quotaExceeded } = useEstate();
-
-  const initialRoute = parseLocationRoute(window.location.pathname);
-  const [currentPage, setCurrentPage] = useState<AppPage>(initialRoute.page);
-  const [selectedPlotCode, setSelectedPlotCode] = useState<string | null>(
-    initialRoute.plotCode ?? null
-  );
-  const [visitPlotId, setVisitPlotId] = useState<number | null>(null);
-  const [plotFilters, setPlotFilters] = useState<PlotFilters>({
-    q: '',
-    location: 'All',
-    status: 'All',
-    maxPrice: '',
-    minSize: '',
-  });
-
-  useEffect(() => {
-    const onPopState = () => {
-      const parsed = parseLocationRoute(window.location.pathname);
-      setCurrentPage(parsed.page);
-      setSelectedPlotCode(parsed.plotCode ?? null);
-    };
-    window.addEventListener('popstate', onPopState);
-    return () => window.removeEventListener('popstate', onPopState);
-  }, []);
-
-  const navigate = useCallback((page: AppPage, plot?: PlotItem | null) => {
-    const targetPath = pageToPath(page, plot);
-    if (window.location.pathname !== targetPath) {
-      window.history.pushState({}, '', targetPath);
-    }
-    setCurrentPage(page);
-    if (plot) {
-      setSelectedPlotCode(plot.plotCode);
-    }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
-
-  const handleSelectPlot = useCallback(
-    (plot: PlotItem) => {
-      navigate('plot-details', plot);
-    },
-    [navigate]
-  );
-
-  const handleBookVisit = useCallback(
-    (plot?: PlotItem) => {
-      setVisitPlotId(plot ? plot.id : null);
-      navigate('site-visit');
-    },
-    [navigate]
-  );
-
-  const handleApplySearch = useCallback(
-    (filters: PlotFilters) => {
-      setPlotFilters((prev) => ({ ...prev, ...filters }));
-      navigate('plots');
-    },
-    [navigate]
-  );
-
-  const activePlot =
-    plots.find(
-      (p) =>
-        p.plotCode.toLowerCase() === (selectedPlotCode || '').toLowerCase() ||
-        String(p.id) === selectedPlotCode
-    ) || plots[0];
-
+function NotFound() {
   return (
-    <div className="min-h-screen flex flex-col bg-white text-[#10241D]">
-      {quotaExceeded && (
-        <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs md:text-sm text-center sticky top-0 z-50 shadow-sm">
-          <span>
-            Google Maps Platform quota reached. If you are the app owner, visit{' '}
-            <a
-              href="https://developers.google.com/maps/ai/ai-studio?utm_campaign=gmp_mcp_codeassist_v1_aistudio#quota_exceeded_errors"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline font-semibold text-amber-950 hover:text-amber-800"
-            >
-              maps developer site
-            </a>{' '}
-            for instructions to update your account.
-          </span>
-        </div>
-      )}
-
-      <Header
-        brandName={settings.companyName}
-        currentPage={currentPage}
-        onNavigate={(page) => navigate(page)}
-      />
-
-      <main className="flex-1">
-        {currentPage === 'home' && (
-          <HomePage
-            onNavigate={(page) => navigate(page)}
-            onSelectPlot={handleSelectPlot}
-            onBookVisit={handleBookVisit}
-            onApplySearch={handleApplySearch}
-          />
-        )}
-
-        {currentPage === 'about' && <AboutPage onNavigate={(page) => navigate(page)} />}
-
-        {currentPage === 'plots' && (
-          <PlotsListPage
-            filters={plotFilters}
-            onFiltersChange={setPlotFilters}
-            onSelectPlot={handleSelectPlot}
-            onBookVisit={handleBookVisit}
-          />
-        )}
-
-        {currentPage === 'plot-details' && activePlot && (
-          <PlotDetailsPage
-            plot={activePlot}
-            onBack={() => navigate('plots')}
-            onBookVisit={handleBookVisit}
-          />
-        )}
-
-        {currentPage === 'gallery' && <GalleryPage onSelectPlot={handleSelectPlot} />}
-
-        {currentPage === 'map' && <MapPage onSelectPlot={handleSelectPlot} />}
-
-        {currentPage === 'site-visit' && <SiteVisitPage preselectedPlotId={visitPlotId} />}
-
-        {currentPage === 'reviews' && <ReviewsPage />}
-
-        {currentPage === 'contact' && <ContactPage />}
-
-        {currentPage === 'privacy' && <LegalPage mode="privacy" />}
-
-        {currentPage === 'terms' && <LegalPage mode="terms" />}
-
-        {currentPage === 'admin' && <AdminDashboardPage />}
-      </main>
-
-      <Footer settings={settings} onNavigate={(page) => navigate(page)} />
-
-      <WhatsAppFloat
-        whatsappNumber={settings.whatsappNumber}
-        companyName={settings.companyName}
+    <div className="page-shell py-20">
+      <EmptyState
+        icon={<SearchX className="size-5" />}
+        title="Page not found"
+        body="The page you are looking for has moved or never existed."
+        action={<Link to="/" className="btn btn-primary">Back to home</Link>}
       />
     </div>
   );
-};
+}
+
+function PublicRoutes() {
+  const { path } = useRouter();
+
+  const seatMatch = matchPath('/buses/:id/seats', path);
+  const confirmationMatch = matchPath('/booking/confirmation/:code', path);
+  const bookingMatch = matchPath('/bookings/:code', path);
+
+  if (path === '/') return <HomePage />;
+  if (path === '/search') return <SearchPage />;
+  if (path === '/buses') return <BusListPage />;
+  if (seatMatch) return <SeatSelectionPage tripId={seatMatch.id} />;
+  if (path === '/booking/passengers') return <PassengerDetailsPage />;
+  if (path === '/booking/payment') return <PaymentPage />;
+  if (confirmationMatch) return <ConfirmationPage code={confirmationMatch.code} />;
+  if (path === '/bookings') return <MyBookingsPage />;
+  if (bookingMatch) return <BookingDetailPage code={bookingMatch.code} />;
+  if (path === '/login') return <AuthPage mode="login" />;
+  if (path === '/register') return <AuthPage mode="register" />;
+  if (path === '/account') return <AccountPage />;
+  if (path === '/about') return <AboutPage />;
+  if (path === '/contact') return <ContactPage />;
+  if (path === '/faq') return <FaqPage />;
+  if (path === '/privacy') return <LegalPage mode="privacy" />;
+  if (path === '/terms') return <LegalPage mode="terms" />;
+  if (path === '/refund') return <LegalPage mode="refund" />;
+  return <NotFound />;
+}
+
+function AdminRoutes() {
+  const { path } = useRouter();
+  if (path === '/admin/login') return <AdminLoginPage />;
+
+  const page = (() => {
+    if (path === '/admin') return <AdminDashboardPage />;
+    if (path === '/admin/bookings') return <AdminBookingsPage />;
+    if (path === '/admin/fleet') return <AdminFleetPage />;
+    if (path === '/admin/routes') return <AdminRoutesPage />;
+    if (path === '/admin/customers') return <AdminCustomersPage />;
+    if (path === '/admin/coupons') return <AdminCouponsPage />;
+    if (path === '/admin/reviews') return <AdminReviewsPage />;
+    if (path === '/admin/content') return <AdminContentPage />;
+    if (path === '/admin/reports') return <AdminReportsPage />;
+    return <NotFound />;
+  })();
+
+  return <AdminLayout>{page}</AdminLayout>;
+}
+
+function Shell() {
+  const { path } = useRouter();
+  const isAdmin = path === '/admin' || path.startsWith('/admin/');
+
+  if (isAdmin) return <AdminRoutes />;
+
+  return (
+    <div className="flex min-h-screen flex-col bg-white">
+      <Header />
+      <main className="flex-1">
+        <PublicRoutes />
+      </main>
+      <Footer />
+      <WhatsAppFloat />
+    </div>
+  );
+}
 
 export default function App() {
   return (
-    <EstateProvider>
-      <EstateAppShell />
-    </EstateProvider>
+    <RouterProvider>
+      <I18nProvider>
+        <ToastProvider>
+          <SiteProvider>
+            <AuthProvider>
+              <Shell />
+            </AuthProvider>
+          </SiteProvider>
+        </ToastProvider>
+      </I18nProvider>
+    </RouterProvider>
   );
 }

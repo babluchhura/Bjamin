@@ -1,368 +1,260 @@
-import React, { useMemo, useState } from 'react';
-import { ArrowRight, MessageCircle, Search } from 'lucide-react';
-import { PlotCard } from '../components/PlotCard';
-import { SmartImage } from '../components/SmartImage';
-import { useEstate } from '../context/EstateContext';
-import { buildWhatsAppUrl } from '../lib/api';
-import type { PlotFilters, PlotItem } from '../types/estate';
-import type { AppPage } from '../components/Header';
+import { useEffect, useState } from 'react';
+import {
+  ArrowRight,
+  BadgeCheck,
+  BusFront,
+  Clock,
+  CreditCard,
+  MapPin,
+  Percent,
+  Quote,
+  ShieldCheck,
+  Sparkles,
+  Ticket,
+  TrendingUp,
+} from 'lucide-react';
+import SearchBox from '../components/SearchBox';
+import { SectionHeading, Stars } from '../components/ui';
+import { Link } from '../lib/router';
+import { api } from '../lib/api';
+import { formatINR, todayInput } from '../lib/format';
+import { useI18n } from '../lib/i18n';
+import { useSite } from '../lib/site';
 
-interface HomePageProps {
-  onNavigate: (page: AppPage) => void;
-  onSelectPlot: (plot: PlotItem) => void;
-  onBookVisit: (plot?: PlotItem) => void;
-  onApplySearch: (filters: PlotFilters) => void;
-}
+type PopularRoute = { route: { id: number; origin: string; destination: string; distanceKm: number }; minFare: number };
+type Banner = { id: number; title: string; subtitle: string; ctaText: string; ctaLink: string };
+type Review = { id: number; authorName: string; routeLabel: string | null; rating: number; comment: string };
 
-const PILLARS = [
-  {
-    num: '01',
-    title: 'Clear Freehold Title & Survey',
-    body: 'Every parcel includes an independent legal chain-of-title dossier, registered municipal survey map, and permanent stone boundary pillars installed prior to sale.',
-    metric: '100% Clear-Title Guarantee',
-  },
-  {
-    num: '02',
-    title: 'Wide Paved Concrete Boulevards',
-    body: 'Internal avenues range from 30 ft cul-de-sacs to 60 ft divided township boulevards with storm-water drainage and pedestrian sidewalks.',
-    metric: '30–60 ft Road Frontage',
-  },
-  {
-    num: '03',
-    title: 'Ready Underground Utilities',
-    body: 'Municipal water stubs, underground electrical conduits, and fiber-optic ducting are brought directly to each plot boundary before handover.',
-    metric: 'Zero Post-Purchase Delays',
-  },
-  {
-    num: '04',
-    title: 'Direct Developer Pricing',
-    body: 'Purchase directly from Bolangir Jamin with transparent per-decimal pricing, no brokerage markups, and milestone-aligned registration.',
-    metric: '14-Day Standard Closing',
-  },
-];
+export default function HomePage() {
+  const { t } = useI18n();
+  const { settings } = useSite();
+  const [routes, setRoutes] = useState<PopularRoute[]>([]);
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
 
-export const HomePage: React.FC<HomePageProps> = ({
-  onNavigate,
-  onSelectPlot,
-  onBookVisit,
-  onApplySearch,
-}) => {
-  const { settings, plots, reviews, loading } = useEstate();
-  const [searchLocation, setSearchLocation] = useState('All');
-  const [searchBudget, setSearchBudget] = useState('');
-  const [searchSize, setSearchSize] = useState('');
-
-  const locations = useMemo(
-    () => Array.from(new Set(plots.map((p) => p.location))).sort(),
-    [plots]
-  );
-
-  const featuredPlots = useMemo(
-    () => plots.filter((p) => p.featured).slice(0, 3),
-    [plots]
-  );
-
-  const latestAvailable = useMemo(
-    () => plots.filter((p) => p.status === 'Available').slice(0, 3),
-    [plots]
-  );
-
-  const handleHeroSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const isMinBudget = searchBudget === 'min:10000000';
-    onApplySearch({
-      location: searchLocation,
-      minPrice: isMinBudget ? '10000000' : undefined,
-      maxPrice: isMinBudget || !searchBudget ? undefined : searchBudget,
-      minSize: searchSize || undefined,
-    });
-  };
-
-  const whatsappHeroUrl = buildWhatsAppUrl(
-    settings.whatsappNumber,
-    `Hello ${settings.companyName}, I would like to explore your available residential plots.`
-  );
+  useEffect(() => {
+    api.popularRoutes().then(setRoutes).catch(() => setRoutes([]));
+    api.banners().then(setBanners).catch(() => setBanners([]));
+    api.reviews().then(setReviews).catch(() => setReviews([]));
+  }, []);
 
   return (
     <div>
-      {/* Hero Section */}
-      <section className="relative bg-[#071E17] text-white overflow-hidden">
-        <div className="absolute inset-0">
-          <SmartImage
-            src={settings.heroImage}
-            alt="Aerial view of manicured Bolangir Jamin residential land plots"
-            className="w-full h-full object-cover"
-            eager
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#071E17]/92 via-[#071E17]/75 to-[#071E17]/35" />
-        </div>
-
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 lg:py-28">
-          <div className="max-w-2xl">
-            <p className="text-xs font-mono tracking-wider text-[#D1AA48] mb-3">
-              Surveyed Residential Land · Clear Freehold Titles
-            </p>
-            <h1 className="font-display text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight leading-[1.08] text-white">
-              {settings.heroHeadline}
-            </h1>
-            <p className="mt-5 text-base sm:text-lg text-white/85 leading-relaxed max-w-xl">
-              {settings.heroSubheadline}
-            </p>
-
-            <div className="mt-8 flex flex-wrap items-center gap-4">
-              <button
-                type="button"
-                onClick={() => onNavigate('plots')}
-                className="inline-flex items-center gap-2 px-6 py-3.5 text-sm font-semibold text-[#071E17] bg-[#D1AA48] rounded-md hover:bg-[#B88E2F] transition-colors whitespace-nowrap"
-              >
-                Explore Available Plots
-                <ArrowRight className="w-4 h-4" />
-              </button>
-
-              <a
-                href={whatsappHeroUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-5 py-3.5 text-sm font-semibold text-white bg-white/10 backdrop-blur border border-white/25 rounded-md hover:bg-white/20 transition-colors whitespace-nowrap"
-              >
-                <MessageCircle className="w-4 h-4 text-[#D1AA48]" />
-                Chat on WhatsApp
-              </a>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Search Bar Strip */}
-      <section className="bg-[#F7F9F8] border-b border-[#E2E8E5]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <form
-            onSubmit={handleHeroSearch}
-            className="bg-white border border-[#E2E8E5] rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end"
-          >
-            <div>
-              <label className="block text-xs font-medium text-[#3D524A] mb-1.5">
-                Location / District
-              </label>
-              <select
-                value={searchLocation}
-                onChange={(e) => setSearchLocation(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm bg-white border border-[#D4DDD8] rounded-md text-[#10241D]"
-              >
-                <option value="All">All Locations (Odisha)</option>
-                {locations.map((loc) => (
-                  <option key={loc} value={loc}>
-                    {loc}
-                  </option>
-                ))}
-              </select>
+      {/* Hero */}
+      <section className="relative overflow-hidden bg-gradient-to-br from-ink-900 via-brand-900 to-brand-700 text-white">
+        <div className="pointer-events-none absolute -left-24 top-10 size-72 rounded-full bg-brand-400/20 blur-3xl" />
+        <div className="pointer-events-none absolute -right-16 bottom-0 size-80 rounded-full bg-sky-300/20 blur-3xl" />
+        <div className="page-shell relative pt-12 pb-8 lg:pt-16">
+          <div className="grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="animate-fade-up">
+              <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-brand-100">
+                <Sparkles className="size-3.5" /> Odisha · INR · English / हिन्दी / ଓଡ଼ିଆ
+              </span>
+              <h1 className="mt-5 font-display text-3xl leading-[1.12] font-semibold sm:text-4xl lg:text-[2.9rem]">
+                {t('home.heroTitle')}
+              </h1>
+              <p className="mt-4 max-w-xl text-sm leading-relaxed text-brand-100/90 sm:text-base">
+                {t('home.heroSubtitle')}
+              </p>
+              <div className="mt-6 flex flex-wrap gap-5 text-xs font-semibold text-brand-100/80">
+                <span className="inline-flex items-center gap-1.5"><BadgeCheck className="size-4 text-brand-300" /> Verified operators</span>
+                <span className="inline-flex items-center gap-1.5"><ShieldCheck className="size-4 text-brand-300" /> Server-verified payments</span>
+                <span className="inline-flex items-center gap-1.5"><Ticket className="size-4 text-brand-300" /> Instant e-tickets</span>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-[#3D524A] mb-1.5">
-                Budget ({settings.currencySymbol})
-              </label>
-              <select
-                value={searchBudget}
-                onChange={(e) => setSearchBudget(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm bg-white border border-[#D4DDD8] rounded-md text-[#10241D]"
-              >
-                <option value="">Any Budget (All Prices)</option>
-                <option value="1000000">Up to {settings.currencySymbol}10,00,000</option>
-                <option value="2000000">Up to {settings.currencySymbol}20,00,000</option>
-                <option value="3500000">Up to {settings.currencySymbol}35,00,000</option>
-                <option value="7500000">Up to {settings.currencySymbol}75,00,000</option>
-                <option value="15000000">Up to {settings.currencySymbol}1,50,00,000</option>
-                <option value="min:10000000">Above {settings.currencySymbol}1,00,00,000</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-[#3D524A] mb-1.5">
-                Plot Size (Decimals / Hectares)
-              </label>
-              <select
-                value={searchSize}
-                onChange={(e) => setSearchSize(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm bg-white border border-[#D4DDD8] rounded-md text-[#10241D]"
-              >
-                <option value="">Any Size (All Decimals &amp; Hectares)</option>
-                <option value="3">3+ Decimals (0.012+ Ha)</option>
-                <option value="5">5+ Decimals (0.020+ Ha)</option>
-                <option value="10">10+ Decimals (0.040+ Ha)</option>
-                <option value="25">25+ Decimals (0.10+ Ha)</option>
-                <option value="100">100+ Decimals (0.40+ Ha)</option>
-                <option value="247">247+ Decimals (1.00+ Hectare)</option>
-              </select>
-            </div>
-
-            <button
-              type="submit"
-              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 h-[42px] text-sm font-semibold text-white bg-[#0B281F] rounded-md hover:bg-[#12382B] transition-colors"
-            >
-              <Search className="w-4 h-4" />
-              Search Plots
-            </button>
-          </form>
-        </div>
-      </section>
-
-      {/* Featured Properties */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
-          <div>
-            <p className="text-xs font-mono text-[#9E7822] mb-1">Curated Release</p>
-            <h2 className="font-display text-3xl sm:text-4xl font-semibold text-[#0B281F]">
-              Featured Residential Plots
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={() => onNavigate('plots')}
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0B281F] hover:text-[#9E7822] transition-colors self-start sm:self-auto"
-          >
-            View All Plots
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[1, 2, 3].map((n) => (
-              <div
-                key={n}
-                className="h-[420px] rounded-lg border border-[#E2E8E5] bg-[#F7F9F8] animate-pulse"
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {featuredPlots.map((plot) => (
-              <PlotCard
-                key={plot.id}
-                plot={plot}
-                currencySymbol={settings.currencySymbol}
-                whatsappNumber={settings.whatsappNumber}
-                onSelectPlot={onSelectPlot}
-                onBookVisit={(p) => onBookVisit(p)}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      {/* Why Choose Us */}
-      <section className="bg-[#0B281F] text-white py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-2xl mb-10">
-            <p className="text-xs font-mono text-[#D1AA48] mb-2">Development Standards</p>
-            <h2 className="font-display text-3xl sm:text-4xl font-semibold text-white">
-              Why Families &amp; Builders Choose {settings.companyName}
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {PILLARS.map((item) => (
-              <div
-                key={item.num}
-                className="bg-[#12382B] border border-white/10 rounded-lg p-6 flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex items-center justify-between gap-4 mb-3">
-                    <span className="font-mono text-sm text-[#D1AA48] tabular-nums">
-                      {item.num}.
-                    </span>
-                    <span className="text-xs text-white/75">{item.metric}</span>
+            <div className="relative hidden lg:block">
+              <div className="animate-float-soft rounded-3xl border border-white/15 bg-white/10 p-5 backdrop-blur">
+                <div className="rounded-2xl bg-white p-4 text-ink-900 shadow-2xl">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-brand-600">Next departure</p>
+                      <p className="mt-1 text-sm font-bold">Bhubaneswar → Puri</p>
+                    </div>
+                    <span className="rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">On time</span>
                   </div>
-                  <h3 className="font-display text-2xl font-semibold text-white mb-2">
-                    {item.title}
-                  </h3>
-                  <p className="text-sm text-white/80 leading-relaxed">{item.body}</p>
+                  <div className="mt-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-lg font-bold tabular-nums">06:30</p>
+                      <p className="text-[11px] text-ink-500">Baramunda</p>
+                    </div>
+                    <div className="mx-3 flex-1 border-t border-dashed border-mist-200" />
+                    <div className="text-right">
+                      <p className="text-lg font-bold tabular-nums">08:00</p>
+                      <p className="text-[11px] text-ink-500">Puri</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid grid-cols-6 gap-1.5">
+                    {['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'B1', 'B2', 'B3', 'B4', 'B5', 'B6'].map((s, i) => (
+                      <span
+                        key={s}
+                        className={`grid h-7 place-items-center rounded border text-[9px] font-bold ${
+                          i === 3 || i === 8
+                            ? 'border-brand-600 bg-brand-600 text-white'
+                            : i === 5 || i === 10
+                              ? 'border-slate-200 bg-slate-100 text-slate-400'
+                              : 'border-slate-200 text-ink-500'
+                        }`}
+                      >
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex items-center justify-between border-t border-mist-100 pt-3">
+                    <p className="text-sm font-bold">{formatINR(349)}</p>
+                    <span className="rounded-lg bg-brand-600 px-3 py-1.5 text-[11px] font-bold text-white">Select seats</span>
+                  </div>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-8">
+            <SearchBox variant="hero" initialDate={todayInput()} />
+          </div>
+        </div>
+      </section>
+
+      {/* Banners / offers */}
+      {banners.length > 0 ? (
+        <section className="page-shell mt-10">
+          <div className="grid gap-4 md:grid-cols-2">
+            {banners.slice(0, 2).map((banner) => (
+              <div
+                key={banner.id}
+                className="relative overflow-hidden rounded-2xl border border-brand-100 bg-gradient-to-br from-brand-50 via-white to-sky-50 p-5"
+              >
+                <Percent className="absolute -right-3 -top-3 size-20 text-brand-100" />
+                <p className="text-[11px] font-bold uppercase tracking-widest text-brand-600">Offer</p>
+                <h3 className="mt-1.5 text-lg font-semibold text-ink-900">{banner.title}</h3>
+                <p className="mt-1 max-w-sm text-sm text-ink-500">{banner.subtitle}</p>
+                <Link to={banner.ctaLink} className="mt-3 inline-flex items-center gap-1 text-sm font-bold text-brand-700">
+                  {banner.ctaText} <ArrowRight className="size-4" />
+                </Link>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Popular routes */}
+      <section className="page-shell mt-14">
+        <SectionHeading
+          eyebrow="Routes"
+          title={t('home.popularRoutes')}
+          body="Every departure below is live — pick a route to see today's buses, seats and fares."
+          action={
+            <Link to="/search" className="btn btn-ghost">
+              {t('home.viewAllRoutes')} <ArrowRight className="size-4" />
+            </Link>
+          }
+        />
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {routes.slice(0, 8).map((item) => (
+            <Link
+              key={item.route.id}
+              to={`/buses?from=${encodeURIComponent(item.route.origin)}&to=${encodeURIComponent(item.route.destination)}&date=${todayInput()}&pax=1`}
+              className="card group p-4 transition hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-lg hover:shadow-brand-900/5"
+            >
+              <div className="flex items-center justify-between">
+                <span className="grid size-9 place-items-center rounded-xl bg-brand-50 text-brand-600">
+                  <BusFront className="size-4" />
+                </span>
+                <span className="text-[11px] font-semibold text-ink-300">{item.route.distanceKm} km</span>
+              </div>
+              <p className="mt-3 text-sm font-bold text-ink-900">
+                {item.route.origin} <span className="text-brand-500">→</span> {item.route.destination}
+              </p>
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-[11px] text-ink-500">from <span className="font-bold text-ink-900">{formatINR(item.minFare)}</span></span>
+                <ArrowRight className="size-4 text-ink-300 transition group-hover:translate-x-0.5 group-hover:text-brand-600" />
+              </div>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      {/* Why us */}
+      <section className="page-shell mt-16">
+        <SectionHeading eyebrow="Why Utkal Yatra" title={t('home.whyTitle')} align="center" />
+        <div className="mt-7 grid gap-4 md:grid-cols-3">
+          {[
+            { icon: <Ticket className="size-5" />, title: t('home.why1'), body: t('home.why1Body') },
+            { icon: <CreditCard className="size-5" />, title: t('home.why2'), body: t('home.why2Body') },
+            { icon: <ShieldCheck className="size-5" />, title: t('home.why3'), body: t('home.why3Body') },
+          ].map((item) => (
+            <div key={item.title} className="card p-5">
+              <span className="grid size-11 place-items-center rounded-xl bg-brand-50 text-brand-600">{item.icon}</span>
+              <h3 className="mt-4 text-base font-semibold">{item.title}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-ink-500">{item.body}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section className="mt-16 bg-mist-50 py-14">
+        <div className="page-shell">
+          <SectionHeading eyebrow="Simple" title={t('home.howTitle')} align="center" />
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            {[
+              { n: '01', icon: <MapPin className="size-5" />, title: t('home.step1'), body: t('home.step1Body') },
+              { n: '02', icon: <BusFront className="size-5" />, title: t('home.step2'), body: t('home.step2Body') },
+              { n: '03', icon: <TrendingUp className="size-5" />, title: t('home.step3'), body: t('home.step3Body') },
+            ].map((step) => (
+              <div key={step.n} className="relative rounded-2xl border border-mist-200 bg-white p-5">
+                <span className="absolute right-4 top-4 font-display text-2xl font-semibold text-brand-100">{step.n}</span>
+                <span className="grid size-11 place-items-center rounded-xl bg-ink-900 text-white">{step.icon}</span>
+                <h3 className="mt-4 text-base font-semibold">{step.title}</h3>
+                <p className="mt-1.5 text-sm text-ink-500">{step.body}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Latest Available Plots */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
-          <div>
-            <p className="text-xs font-mono text-[#9E7822] mb-1">Immediate Possession</p>
-            <h2 className="font-display text-3xl sm:text-4xl font-semibold text-[#0B281F]">
-              Latest Available Plots
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={() => onNavigate('map')}
-            className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0B281F] hover:text-[#9E7822] transition-colors self-start sm:self-auto"
-          >
-            Inspect on Live Map
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {latestAvailable.map((plot) => (
-            <PlotCard
-              key={plot.id}
-              plot={plot}
-              currencySymbol={settings.currencySymbol}
-              whatsappNumber={settings.whatsappNumber}
-              onSelectPlot={onSelectPlot}
-              onBookVisit={(p) => onBookVisit(p)}
-            />
-          ))}
-        </div>
-      </section>
-
-      {/* Customer Testimonials */}
-      <section className="bg-[#F7F9F8] border-t border-[#E2E8E5] py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
-            <div>
-              <p className="text-xs font-mono text-[#9E7822] mb-1">Verified Landowners</p>
-              <h2 className="font-display text-3xl sm:text-4xl font-semibold text-[#0B281F]">
-                Homeowner &amp; Investor Testimonials
-              </h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => onNavigate('reviews')}
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#0B281F] hover:text-[#9E7822] transition-colors"
-            >
-              Read All Reviews
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {reviews.slice(0, 4).map((rev) => (
-              <blockquote
-                key={rev.id}
-                className="bg-white border border-[#E2E8E5] rounded-lg p-6 flex flex-col justify-between"
-              >
-                <p className="text-sm sm:text-base text-[#273E36] leading-relaxed mb-5">
-                  &ldquo;{rev.comment}&rdquo;
-                </p>
-                <footer className="pt-4 border-t border-[#E2E8E5] flex items-center justify-between gap-4">
-                  <div>
-                    <div className="font-semibold text-sm text-[#0B281F]">
-                      {rev.customerName}
-                    </div>
-                    <div className="text-xs text-[#5B7269]">{rev.customerRole}</div>
+      {/* Reviews */}
+      {reviews.length > 0 ? (
+        <section className="page-shell mt-16">
+          <SectionHeading eyebrow="Travellers" title={t('home.reviewsTitle')} />
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {reviews.slice(0, 3).map((review) => (
+              <figure key={review.id} className="card flex h-full flex-col p-5">
+                <Quote className="size-5 text-brand-200" />
+                <blockquote className="mt-2 flex-1 text-sm leading-relaxed text-ink-700">{review.comment}</blockquote>
+                <figcaption className="mt-4 border-t border-mist-100 pt-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold">{review.authorName}</p>
+                    <Stars rating={review.rating} />
                   </div>
-                  <div className="text-xs font-mono text-[#9E7822] tabular-nums shrink-0">
-                    {rev.rating}.0 / 5.0
-                  </div>
-                </footer>
-              </blockquote>
+                  {review.routeLabel ? <p className="text-[11px] text-ink-500">{review.routeLabel}</p> : null}
+                </figcaption>
+              </figure>
             ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* CTA */}
+      <section className="page-shell mt-16">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-brand-700 via-brand-600 to-brand-500 px-6 py-10 text-white sm:px-10">
+          <div className="pointer-events-none absolute -right-10 -top-10 size-56 rounded-full bg-white/10 blur-2xl" />
+          <div className="relative flex flex-col items-start justify-between gap-5 sm:flex-row sm:items-center">
+            <div>
+              <h2 className="font-display text-2xl font-semibold sm:text-3xl">{t('home.ctaTitle')}</h2>
+              <p className="mt-2 max-w-xl text-sm text-brand-50/90">{t('home.ctaBody')}</p>
+            </div>
+            <Link to="/search" className="btn bg-white text-brand-700 hover:bg-brand-50">
+              {t('common.searchBuses')} <ArrowRight className="size-4" />
+            </Link>
+          </div>
+          <div className="relative mt-6 flex flex-wrap gap-x-6 gap-y-2 text-[11px] font-semibold text-brand-50/80">
+            <span className="inline-flex items-center gap-1.5"><Clock className="size-3.5" /> Live seat availability</span>
+            <span className="inline-flex items-center gap-1.5"><ShieldCheck className="size-3.5" /> Secure checkout</span>
+            <span className="inline-flex items-center gap-1.5"><MapPin className="size-3.5" /> {settings.officeAddress}</span>
           </div>
         </div>
       </section>
     </div>
   );
-};
+}

@@ -1,165 +1,72 @@
-import React from 'react';
-import { Lock, Mail, MapPin, Phone } from 'lucide-react';
-import type { SiteSettingsMap } from '../types/estate';
-import type { AppPage } from './Header';
+import { BusFront, Mail, MapPin, Phone } from 'lucide-react';
+import { Link } from '../lib/router';
+import { useI18n } from '../lib/i18n';
+import { useSite } from '../lib/site';
 
-interface FooterProps {
-  settings: SiteSettingsMap;
-  onNavigate: (page: AppPage) => void;
-}
+export default function Footer() {
+  const { t } = useI18n();
+  const { settings } = useSite();
 
-export const Footer: React.FC<FooterProps> = ({ settings, onNavigate }) => {
   return (
-    <footer className="bg-[#0B281F] text-white/90 border-t border-[#12382B]">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
-          <div className="space-y-4">
-            <button
-              type="button"
-              onClick={() => onNavigate('home')}
-              className="font-display text-3xl font-semibold text-white tracking-tight text-left"
-            >
-              {settings.companyName}
-            </button>
-            <p className="text-sm text-white/75 leading-relaxed max-w-xs">
-              {settings.tagline}
+    <footer className="mt-16 border-t border-mist-200 bg-ink-900 text-slate-300">
+      <div className="page-shell grid gap-10 py-12 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <span className="grid size-9 place-items-center rounded-xl bg-brand-600 text-white">
+              <BusFront className="size-4.5" />
+            </span>
+            <span className="font-display text-lg font-semibold text-white">{settings.brandName}</span>
+          </div>
+          <p className="mt-3 text-sm leading-relaxed text-slate-400">{t('footer.tagline')}</p>
+          <div className="mt-4 space-y-2 text-sm text-slate-400">
+            <p className="flex items-start gap-2">
+              <MapPin className="mt-0.5 size-4 shrink-0 text-brand-400" /> {settings.officeAddress}
             </p>
-            <div className="flex items-center gap-4 pt-2 text-xs text-[#D1AA48]">
-              {settings.socialFacebook && (
-                <a
-                  href={settings.socialFacebook}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:underline"
-                >
-                  Facebook
-                </a>
-              )}
-              {settings.socialInstagram && (
-                <a
-                  href={settings.socialInstagram}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:underline"
-                >
-                  Instagram
-                </a>
-              )}
-              {settings.socialLinkedIn && (
-                <a
-                  href={settings.socialLinkedIn}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:underline"
-                >
-                  LinkedIn
-                </a>
-              )}
-              {settings.socialYoutube && (
-                <a
-                  href={settings.socialYoutube}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hover:underline"
-                >
-                  YouTube
-                </a>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <h4 className="text-xs font-semibold tracking-wider text-[#D1AA48] mb-4">
-              Explore Estates
-            </h4>
-            <ul className="space-y-2.5 text-sm text-white/80">
-              {[
-                { label: 'Home', page: 'home' as AppPage },
-                { label: 'Available Plots', page: 'plots' as AppPage },
-                { label: 'Plot Gallery', page: 'gallery' as AppPage },
-                { label: 'Location & Map', page: 'map' as AppPage },
-                { label: 'Book Site Visit', page: 'site-visit' as AppPage },
-              ].map((link) => (
-                <li key={link.page}>
-                  <button
-                    type="button"
-                    onClick={() => onNavigate(link.page)}
-                    className="hover:text-white transition-colors"
-                  >
-                    {link.label}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="text-xs font-semibold tracking-wider text-[#D1AA48] mb-4">
-              Company & Legal
-            </h4>
-            <ul className="space-y-2.5 text-sm text-white/80">
-              {[
-                { label: 'About Us', page: 'about' as AppPage },
-                { label: 'Customer Reviews', page: 'reviews' as AppPage },
-                { label: 'Contact Us', page: 'contact' as AppPage },
-                { label: 'Privacy Policy', page: 'privacy' as AppPage },
-                { label: 'Terms & Conditions', page: 'terms' as AppPage },
-              ].map((link) => (
-                <li key={link.page}>
-                  <button
-                    type="button"
-                    onClick={() => onNavigate(link.page)}
-                    className="hover:text-white transition-colors"
-                  >
-                    {link.label}
-                  </button>
-                </li>
-              ))}
-              <li>
-                <button
-                  type="button"
-                  onClick={() => onNavigate('admin')}
-                  className="inline-flex items-center gap-1.5 text-[#D1AA48] hover:text-white transition-colors pt-1"
-                >
-                  <Lock className="w-3.5 h-3.5" />
-                  Admin Portal
-                </button>
-              </li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="text-xs font-semibold tracking-wider text-[#D1AA48] mb-4">
-              Sales & Advisory Office
-            </h4>
-            <ul className="space-y-3 text-sm text-white/80">
-              <li className="flex items-start gap-2.5">
-                <MapPin className="w-4 h-4 text-[#D1AA48] shrink-0 mt-0.5" />
-                <span>{settings.officeAddress}</span>
-              </li>
-              <li className="flex items-center gap-2.5">
-                <Phone className="w-4 h-4 text-[#D1AA48] shrink-0" />
-                <a href={`tel:${settings.contactPhone}`} className="hover:text-white">
-                  {settings.contactPhone}
-                </a>
-              </li>
-              <li className="flex items-center gap-2.5">
-                <Mail className="w-4 h-4 text-[#D1AA48] shrink-0" />
-                <a href={`mailto:${settings.contactEmail}`} className="hover:text-white break-all">
-                  {settings.contactEmail}
-                </a>
-              </li>
-            </ul>
+            <a href={`tel:${settings.supportPhone?.replace(/\s/g, '')}`} className="flex items-center gap-2 hover:text-white">
+              <Phone className="size-4 text-brand-400" /> {settings.supportPhone}
+            </a>
+            <a href={`mailto:${settings.supportEmail}`} className="flex items-center gap-2 hover:text-white">
+              <Mail className="size-4 text-brand-400" /> {settings.supportEmail}
+            </a>
           </div>
         </div>
 
-        <div className="mt-12 pt-6 border-t border-white/15 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-white/65">
-          <p>
-            &copy; {new Date().getFullYear()} {settings.companyName}. All rights reserved.
-          </p>
-          <p>Clear-title residential land development &amp; parcel advisory.</p>
+        <div>
+          <h4 className="text-sm font-semibold uppercase tracking-wider text-white">{t('footer.company')}</h4>
+          <ul className="mt-3 space-y-2 text-sm">
+            <li><Link to="/about" className="hover:text-white">{t('nav.about')}</Link></li>
+            <li><Link to="/contact" className="hover:text-white">{t('nav.contact')}</Link></li>
+            <li><Link to="/faq" className="hover:text-white">{t('nav.faq')}</Link></li>
+            <li><Link to="/search" className="hover:text-white">{t('nav.search')}</Link></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 className="text-sm font-semibold uppercase tracking-wider text-white">{t('footer.support')}</h4>
+          <ul className="mt-3 space-y-2 text-sm">
+            <li><Link to="/bookings" className="hover:text-white">{t('nav.bookings')}</Link></li>
+            <li><Link to="/account" className="hover:text-white">{t('nav.account')}</Link></li>
+            <li><Link to="/refund" className="hover:text-white">Cancellation & refunds</Link></li>
+            <li><a href={`https://wa.me/${settings.whatsappNumber}`} target="_blank" rel="noreferrer" className="hover:text-white">WhatsApp support</a></li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 className="text-sm font-semibold uppercase tracking-wider text-white">{t('footer.legal')}</h4>
+          <ul className="mt-3 space-y-2 text-sm">
+            <li><Link to="/privacy" className="hover:text-white">Privacy policy</Link></li>
+            <li><Link to="/terms" className="hover:text-white">Terms & conditions</Link></li>
+            <li><Link to="/refund" className="hover:text-white">Refund policy</Link></li>
+            <li><Link to="/admin/login" className="hover:text-white">Admin login</Link></li>
+          </ul>
+        </div>
+      </div>
+      <div className="border-t border-white/10">
+        <div className="page-shell flex flex-col items-center justify-between gap-2 py-4 text-xs text-slate-500 sm:flex-row">
+          <p>© {new Date().getFullYear()} {settings.brandName}. {t('footer.rights')}</p>
+          <p>Made in Odisha · Payments secured by Razorpay</p>
         </div>
       </div>
     </footer>
   );
-};
+}

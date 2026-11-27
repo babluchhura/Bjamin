@@ -1,33 +1,21 @@
-import React from 'react';
 import { MessageCircle } from 'lucide-react';
-import { buildWhatsAppUrl } from '../lib/api';
+import { useSite } from '../lib/site';
 
-interface WhatsAppFloatProps {
-  whatsappNumber: string;
-  companyName: string;
-}
-
-export const WhatsAppFloat: React.FC<WhatsAppFloatProps> = ({
-  whatsappNumber,
-  companyName,
-}) => {
-  const url = buildWhatsAppUrl(
-    whatsappNumber,
-    `Hello ${companyName}, I would like to inquire about available residential plots.`
-  );
+export default function WhatsAppFloat() {
+  const { settings } = useSite();
+  const digits = (settings.whatsappNumber || '').replace(/\D/g, '') || '919090909090';
+  const text = encodeURIComponent(`Hi ${settings.brandName}, I need help with a bus booking.`);
 
   return (
     <a
-      href={url}
+      href={`https://wa.me/${digits}?text=${text}`}
       target="_blank"
-      rel="noopener noreferrer"
+      rel="noreferrer"
+      className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full bg-[#25D366] px-4 py-3 text-sm font-bold text-white shadow-xl shadow-emerald-900/25 transition hover:brightness-105"
       aria-label="Chat with us on WhatsApp"
-      className="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 px-4 py-3 rounded-full bg-[#0B281F] text-white border border-[#B88E2F] shadow-lg hover:bg-[#12382B] transition-transform duration-150 hover:scale-[1.03]"
     >
-      <MessageCircle className="w-5 h-5 text-[#D1AA48]" />
-      <span className="text-xs font-semibold whitespace-nowrap hidden sm:inline">
-        WhatsApp Advisor
-      </span>
+      <MessageCircle className="size-5" />
+      <span className="hidden sm:inline">WhatsApp</span>
     </a>
   );
-};
+}

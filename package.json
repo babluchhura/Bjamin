@@ -1,18 +1,19 @@
 {
-  "name": "emerald-crest-estates",
+  "name": "utkal-yatra",
   "private": true,
   "version": "1.0.0",
+  "description": "Utkal Yatra — online bus ticket booking platform for Odisha (Express API + React SPA + PostgreSQL).",
   "type": "module",
   "engines": {
     "node": ">=22.0.0"
   },
   "scripts": {
     "dev": "tsx server.ts",
-    "start": "node server.ts",
+    "start": "tsx server.ts",
     "build": "vite build",
     "preview": "vite preview",
-    "db:push": "drizzle-kit push --config=src/db/drizzle.config.ts",
-    "clean": "rm -rf dist server.js",
+    "db:push": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f supabase/schema.sql",
+    "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
