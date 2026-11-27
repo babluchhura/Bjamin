@@ -1,0 +1,6 @@
+{
+  "name": "Emerald Crest Estates",
+  "description": "Premium residential plots and cleared land parcels with verified titles, interactive Google Maps locations, and guided site visits.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
