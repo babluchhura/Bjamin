@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MapPin } from 'lucide-react';
+import { resolveEstateImageUrl } from '../lib/estateImages';
 
 interface SmartImageProps {
   src: string;
   alt: string;
   className?: string;
   fallbackTitle?: string;
+  eager?: boolean;
 }
 
 export const SmartImage: React.FC<SmartImageProps> = ({
@@ -13,10 +15,16 @@ export const SmartImage: React.FC<SmartImageProps> = ({
   alt,
   className = '',
   fallbackTitle,
+  eager = false,
 }) => {
+  const resolvedSrc = resolveEstateImageUrl(src);
   const [failed, setFailed] = useState(false);
 
-  if (!src || failed) {
+  useEffect(() => {
+    setFailed(false);
+  }, [resolvedSrc]);
+
+  if (!resolvedSrc || failed) {
     return (
       <div
         className={`flex flex-col items-center justify-center bg-gradient-to-br from-[#0B281F] via-[#12382B] to-[#1B4D3C] text-white/90 p-6 text-center ${className}`}
@@ -34,12 +42,14 @@ export const SmartImage: React.FC<SmartImageProps> = ({
     );
   }
 
+  const isExternal = /^https?:\/\//i.test(resolvedSrc);
+
   return (
     <img
-      src={src}
+      src={resolvedSrc}
       alt={alt}
-      referrerPolicy="no-referrer"
-      loading="lazy"
+      referrerPolicy={isExternal ? 'no-referrer' : undefined}
+      loading={eager ? 'eager' : 'lazy'}
       onError={() => setFailed(true)}
       className={className}
     />

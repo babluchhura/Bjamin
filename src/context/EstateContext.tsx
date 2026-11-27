@@ -30,11 +30,23 @@ const DEFAULT_SETTINGS: SiteSettingsMap = {
   socialYoutube: 'https://youtube.com',
 };
 
+export interface AdminSessionValidation {
+  appUrlValidated: boolean;
+  configuredAppUrl: string | null;
+  tokenAppUrl: string | null;
+  emailMatchesAdminEmail: boolean;
+  provider: string;
+  role: string;
+  email: string;
+  supabaseWarning?: string;
+}
+
 interface EstateContextValue {
   settings: SiteSettingsMap;
   plots: PlotItem[];
   reviews: ReviewItem[];
   googleMapsApiKey: string;
+  supabaseConfig: { url: string; anonKey: string } | null;
   loading: boolean;
   error: string | null;
   quotaExceeded: boolean;
@@ -42,6 +54,7 @@ interface EstateContextValue {
   authToken: string | null;
   userRole: string | null;
   authConfig: AdminAuthConfig | null;
+  sessionValidation: AdminSessionValidation | null;
   authLoading: boolean;
   authError: string | null;
   refreshData: () => Promise<void>;
@@ -72,6 +85,8 @@ export const EstateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [authConfig, setAuthConfig] = useState<AdminAuthConfig | null>(null);
+  const [sessionValidation, setSessionValidation] =
+    useState<AdminSessionValidation | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -89,6 +104,7 @@ export const EstateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           googleMapsApiKey: '',
           supabaseUrl: '',
           supabaseAnonKey: '',
+          appUrl: '',
         })),
         api.getSettings(),
         api.getPlots(),
@@ -133,19 +149,33 @@ export const EstateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setAuthLoading(true);
       try {
         const trimmedIdentifier = username.trim();
-        let res: { token: string; user: AdminUser } | null = null;
+        let res: {
+          token: string;
+          user: AdminUser;
+          supabaseWarning?: string;
+          appUrlValidated?: boolean;
+        } | null = null;
 
         if (trimmedIdentifier.includes('@')) {
           const sb = getSupabaseClient(supabaseConfig?.url, supabaseConfig?.anonKey);
           if (sb) {
             let accessToken: string | undefined;
             try {
-              const { data } = await sb.auth.signInWithPassword({
+              const { data, error: sbError } = await sb.auth.signInWithPassword({
                 email: trimmedIdentifier,
                 password,
               });
+              if (sbError) {
+                console.warn('[EstateContext] Supabase signInWithPassword error:', {
+                  email: trimmedIdentifier,
+                  code: sbError.code,
+                  status: sbError.status,
+                  message: sbError.message,
+                });
+              }
               accessToken = data.session?.access_token;
-            } catch {
+            } catch (err) {
+              console.warn('[EstateContext] Supabase signInWithPassword exception:', err);
               accessToken = undefined;
             }
             if (accessToken) {
@@ -160,6 +190,24 @@ export const EstateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           res = await api.adminLogin({ username: trimmedIdentifier, password });
         }
 
+        // Validate issued session against configured APP_URL on the server
+        const verified = await api.getMe(res.token);
+        if (!verified.appUrlValidated) {
+          throw new Error(
+            `Session APP_URL validation failed (token: ${verified.appUrl || 'none'}, expected: ${verified.configuredAppUrl || 'none'}).`
+          );
+        }
+
+        setSessionValidation({
+          appUrlValidated: verified.appUrlValidated,
+          configuredAppUrl: verified.configuredAppUrl,
+          tokenAppUrl: verified.appUrl,
+          emailMatchesAdminEmail: verified.emailMatchesAdminEmail,
+          provider: verified.provider,
+          role: verified.role,
+          email: verified.email,
+          supabaseWarning: res.supabaseWarning,
+        });
         setAuthToken(res.token);
         setAuthUser(res.user);
         setUserRole(res.user.role);
@@ -167,6 +215,7 @@ export const EstateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setAuthToken(null);
         setAuthUser(null);
         setUserRole(null);
+        setSessionValidation(null);
         setAuthError(err instanceof Error ? err.message : 'Invalid username or password.');
         throw err;
       } finally {
@@ -184,6 +233,7 @@ export const EstateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setAuthUser(null);
     setAuthToken(null);
     setUserRole(null);
+    setSessionValidation(null);
     setAuthError(null);
     void refreshAuthConfig();
   }, [refreshAuthConfig, supabaseConfig]);
@@ -195,6 +245,7 @@ export const EstateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         plots,
         reviews,
         googleMapsApiKey,
+        supabaseConfig,
         loading,
         error,
         quotaExceeded,
@@ -202,6 +253,7 @@ export const EstateProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         authToken,
         userRole,
         authConfig,
+        sessionValidation,
         authLoading,
         authError,
         refreshData,

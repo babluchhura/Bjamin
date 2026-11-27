@@ -7,6 +7,8 @@ export interface AdminSessionUser {
   email: string;
   role: 'admin';
   provider: 'supabase' | 'env' | 'database';
+  appUrl?: string;
+  emailMatchesAdminEmail?: boolean;
   exp: number;
 }
 
@@ -17,6 +19,8 @@ export interface AuthRequest extends Request {
     name: string;
     role: 'admin';
     provider: 'supabase' | 'env' | 'database';
+    appUrl?: string;
+    emailMatchesAdminEmail?: boolean;
   };
 }
 
@@ -62,12 +66,79 @@ export function verifyPassword(password: string, stored: string): boolean {
   }
 }
 
+export function getConfiguredAppUrl(): string | null {
+  const raw = process.env.APP_URL?.trim();
+  if (!raw || raw === 'MY_APP_URL') return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
+export function getRequestAppOrigin(req: Request): string | null {
+  const explicitHeader = req.headers['x-app-url'];
+  const candidates = [
+    typeof explicitHeader === 'string' ? explicitHeader : undefined,
+    typeof req.headers.origin === 'string' ? req.headers.origin : undefined,
+    typeof req.headers.referer === 'string' ? req.headers.referer : undefined,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    try {
+      const parsed = new URL(candidate.trim());
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return parsed.origin;
+      }
+    } catch {
+      // Ignore malformed origin/referer header
+    }
+  }
+  return null;
+}
+
+function normalizeAiStudioPreviewHost(hostname: string): string {
+  return hostname.replace(/^ais-(?:dev|pre)-/, 'ais-app-');
+}
+
+export function isAllowedAppOrigin(
+  requestOrigin: string | null,
+  configuredAppUrl: string | null
+): boolean {
+  if (!configuredAppUrl || !requestOrigin) return true;
+  if (requestOrigin === configuredAppUrl) return true;
+  try {
+    const reqParsed = new URL(requestOrigin);
+    if (reqParsed.hostname === 'localhost' || reqParsed.hostname === '127.0.0.1') {
+      return true;
+    }
+    const cfgParsed = new URL(configuredAppUrl);
+    if (
+      reqParsed.protocol === cfgParsed.protocol &&
+      normalizeAiStudioPreviewHost(reqParsed.hostname) ===
+        normalizeAiStudioPreviewHost(cfgParsed.hostname)
+    ) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 export function signAdminToken(
   user: Omit<AdminSessionUser, 'exp'>,
   ttlSeconds = 60 * 60 * 12
 ): string {
+  const configuredAppUrl = getConfiguredAppUrl();
   const payload: AdminSessionUser = {
     ...user,
+    appUrl: user.appUrl || configuredAppUrl || undefined,
+    emailMatchesAdminEmail:
+      user.emailMatchesAdminEmail ?? isConfiguredAdminEmail(user.email),
     exp: Math.floor(Date.now() / 1000) + ttlSeconds,
   };
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -99,6 +170,12 @@ export function verifyAdminToken(token: string): AdminSessionUser | null {
     ) as AdminSessionUser;
     if (!parsed || parsed.role !== 'admin' || !parsed.exp) return null;
     if (parsed.exp < Math.floor(Date.now() / 1000)) return null;
+
+    const configuredAppUrl = getConfiguredAppUrl();
+    if (configuredAppUrl && parsed.appUrl !== configuredAppUrl) {
+      return null;
+    }
+
     return parsed;
   } catch {
     return null;
@@ -157,37 +234,41 @@ async function resolveSupabaseAdminProfile(
   displayName: string
 ): Promise<
   | { ok: true; user: Omit<AdminSessionUser, 'exp'> }
-  | { ok: false; status: number; error: string }
+  | { ok: false; status: number; code?: string; error: string }
 > {
-  let isAdmin = isConfiguredAdminEmail(email);
+  const emailMatchesAdmin = isConfiguredAdminEmail(email);
+  let profileRole: string | null = null;
+  let hasProfileAdminRole = false;
 
-  if (!isAdmin) {
-    const profileRes = await fetch(
-      `${sb.url}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}&select=role`,
-      {
-        headers: {
-          apikey: sb.anonKey,
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
+  const profileRes = await fetch(
+    `${sb.url}/rest/v1/profiles?id=eq.${encodeURIComponent(userId)}&select=role`,
+    {
+      headers: {
+        apikey: sb.anonKey,
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
 
-    if (profileRes.ok) {
-      const profiles = (await profileRes.json().catch(() => [])) as Array<{
-        role?: string;
-      }>;
-      if (Array.isArray(profiles) && profiles.length > 0) {
-        isAdmin = profiles[0]?.role === 'admin';
-      }
+  if (profileRes.ok) {
+    const profiles = (await profileRes.json().catch(() => [])) as Array<{
+      role?: string;
+    }>;
+    if (Array.isArray(profiles) && profiles.length > 0) {
+      profileRole = profiles[0]?.role ?? null;
+      hasProfileAdminRole = profileRole === 'admin';
     }
   }
+
+  const isAdmin = emailMatchesAdmin || hasProfileAdminRole;
 
   if (!isAdmin) {
     return {
       ok: false,
       status: 403,
+      code: 'missing_admin_permissions',
       error:
-        'Forbidden: Your Supabase account is not an authorized administrator. Set role = "admin" in public.profiles or add your email to ADMIN_EMAIL.',
+        `Forbidden: Supabase session (${email}) is missing the required admin email (ADMIN_EMAIL) or admin role permissions (public.profiles role: ${profileRole || 'none'}).`,
     };
   }
 
@@ -199,6 +280,8 @@ async function resolveSupabaseAdminProfile(
       email,
       role: 'admin',
       provider: 'supabase',
+      appUrl: getConfiguredAppUrl() || undefined,
+      emailMatchesAdminEmail: emailMatchesAdmin,
     },
   };
 }
@@ -207,7 +290,7 @@ export async function verifySupabaseAccessToken(
   accessToken: string
 ): Promise<
   | { ok: true; user: Omit<AdminSessionUser, 'exp'> }
-  | { ok: false; status: number; error: string }
+  | { ok: false; status: number; code?: string; error: string }
 > {
   const sb = getSupabaseConfig();
   if (!sb) {
@@ -227,7 +310,12 @@ export async function verifySupabaseAccessToken(
       user_metadata?: { full_name?: string };
     };
     if (!userRes.ok || !sbUser.id || !sbUser.email) {
-      return { ok: false, status: 401, error: 'Invalid or expired Supabase session.' };
+      return {
+        ok: false,
+        status: 401,
+        code: 'invalid_supabase_session',
+        error: 'Invalid or expired Supabase session.',
+      };
     }
     const email = sbUser.email.trim().toLowerCase();
     const displayName = sbUser.user_metadata?.full_name?.trim() || email;
@@ -247,7 +335,7 @@ export async function authenticateWithSupabase(
   password: string
 ): Promise<
   | { ok: true; user: Omit<AdminSessionUser, 'exp'> }
-  | { ok: false; status: number; error: string }
+  | { ok: false; status: number; code?: string; error: string }
 > {
   const sb = getSupabaseConfig();
   if (!sb) {
@@ -270,16 +358,24 @@ export async function authenticateWithSupabase(
     const tokenData = (await tokenRes.json().catch(() => ({}))) as {
       access_token?: string;
       user?: { id?: string; email?: string; user_metadata?: { full_name?: string } };
+      error_code?: string;
       error_description?: string;
       msg?: string;
     };
 
     if (!tokenRes.ok || !tokenData.access_token || !tokenData.user?.id) {
+      const code = tokenData.error_code || 'supabase_auth_failed';
+      const rawMessage =
+        tokenData.error_description || tokenData.msg || 'Invalid Supabase email or password.';
+      const friendlyMessage =
+        code === 'email_not_confirmed'
+          ? `Supabase email is not confirmed for ${emailInput.trim()}. Please confirm this user in Supabase Dashboard -> Authentication -> Users.`
+          : rawMessage;
       return {
         ok: false,
         status: 401,
-        error:
-          tokenData.error_description || tokenData.msg || 'Invalid Supabase email or password.',
+        code,
+        error: friendlyMessage,
       };
     }
 
@@ -310,6 +406,14 @@ export const requireAuth = (
   res: Response,
   next: NextFunction
 ) => {
+  const configuredAppUrl = getConfiguredAppUrl();
+  const requestOrigin = getRequestAppOrigin(req);
+  if (!isAllowedAppOrigin(requestOrigin, configuredAppUrl)) {
+    return res.status(403).json({
+      error: `Forbidden: Request origin (${requestOrigin}) does not match configured APP_URL (${configuredAppUrl}).`,
+    });
+  }
+
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized: Missing admin sign-in token.' });
@@ -318,7 +422,9 @@ export const requireAuth = (
   const token = authHeader.slice('Bearer '.length).trim();
   const session = verifyAdminToken(token);
   if (!session) {
-    return res.status(401).json({ error: 'Unauthorized: Invalid or expired admin session.' });
+    return res.status(401).json({
+      error: 'Unauthorized: Invalid, expired, or APP_URL-mismatched admin session.',
+    });
   }
 
   req.dbUser = {
@@ -327,6 +433,9 @@ export const requireAuth = (
     name: session.username,
     role: session.role,
     provider: session.provider,
+    appUrl: session.appUrl,
+    emailMatchesAdminEmail:
+      session.emailMatchesAdminEmail ?? isConfiguredAdminEmail(session.email),
   };
   next();
 };

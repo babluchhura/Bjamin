@@ -92,6 +92,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             src={settings.heroImage}
             alt="Aerial view of manicured Bolangir Jamin residential land plots"
             className="w-full h-full object-cover"
+            eager
           />
           <div className="absolute inset-0 bg-gradient-to-r from-[#071E17]/92 via-[#071E17]/75 to-[#071E17]/35" />
         </div>

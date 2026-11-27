@@ -21,8 +21,12 @@ import {
 } from './src/db/seed.ts';
 import {
   authenticateWithSupabase,
+  getConfiguredAppUrl,
+  getRequestAppOrigin,
   getSupabaseConfig,
   hashPassword,
+  isAllowedAppOrigin,
+  isConfiguredAdminEmail,
   isEnvAdminConfigured,
   isSupabaseAuthConfigured,
   requireAdmin,
@@ -86,6 +90,7 @@ app.get('/api/public-config', (_req, res) => {
       process.env.VITE_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY || '',
     supabaseUrl: sb?.url || '',
     supabaseAnonKey: sb?.anonKey || '',
+    appUrl: getConfiguredAppUrl() || '',
   });
 });
 
@@ -441,6 +446,8 @@ app.get('/api/admin/auth-config', async (_req, res) => {
   const supabaseConfigured = isSupabaseAuthConfigured();
   const envCredentialsConfigured = isEnvAdminConfigured();
   const databaseUrlConfigured = isValidPostgresUrl(process.env.DATABASE_URL);
+  const configuredAppUrl = getConfiguredAppUrl();
+  const adminEmailConfigured = Boolean(process.env.ADMIN_EMAIL?.trim());
 
   let hasDbCredentials = false;
   try {
@@ -469,12 +476,23 @@ app.get('/api/admin/auth-config', async (_req, res) => {
     supabaseConfigured,
     envCredentialsConfigured,
     databaseUrlConfigured,
+    appUrl: configuredAppUrl || '',
+    appUrlConfigured: Boolean(configuredAppUrl),
+    adminEmailConfigured,
   });
 });
 
 // Admin Username/Email + Password Sign-In (supports Supabase Auth, Env override, and DB scrypt)
 app.post('/api/admin/login', async (req, res) => {
   try {
+    const configuredAppUrl = getConfiguredAppUrl();
+    const requestOrigin = getRequestAppOrigin(req);
+    if (!isAllowedAppOrigin(requestOrigin, configuredAppUrl)) {
+      return res.status(403).json({
+        error: `Forbidden: Origin (${requestOrigin}) is not authorized for configured APP_URL (${configuredAppUrl}).`,
+      });
+    }
+
     const { username, password, supabaseAccessToken } = req.body ?? {};
 
     // 1a. Verify an existing Supabase Auth session token obtained via @supabase/supabase-js
@@ -484,10 +502,14 @@ app.post('/api/admin/login', async (req, res) => {
       }
       const sbResult = await verifySupabaseAccessToken(supabaseAccessToken.trim());
       if (!sbResult.ok) {
-        return res.status(sbResult.status).json({ error: sbResult.error });
+        return res.status(sbResult.status).json({ error: sbResult.error, code: sbResult.code });
       }
       const token = signAdminToken(sbResult.user);
-      return res.json({ token, user: sbResult.user });
+      return res.json({
+        token,
+        user: sbResult.user,
+        appUrlValidated: !configuredAppUrl || sbResult.user.appUrl === configuredAppUrl,
+      });
     }
 
     const identifier = typeof username === 'string' ? username.trim() : '';
@@ -499,16 +521,25 @@ app.post('/api/admin/login', async (req, res) => {
         .json({ error: 'Please enter both username/email and password.' });
     }
 
+    let supabaseWarning: string | undefined;
+    let supabaseFailureCode: string | undefined;
+
     // 1b. Supabase Email + Password Auth when an email is entered
     if (isSupabaseAuthConfigured() && identifier.includes('@')) {
       const sbResult = await authenticateWithSupabase(identifier, pass);
       if (sbResult.ok) {
         const token = signAdminToken(sbResult.user);
-        return res.json({ token, user: sbResult.user });
+        return res.json({
+          token,
+          user: sbResult.user,
+          appUrlValidated: !configuredAppUrl || sbResult.user.appUrl === configuredAppUrl,
+        });
       }
       if (sbResult.status === 403) {
-        return res.status(403).json({ error: sbResult.error });
+        return res.status(403).json({ error: sbResult.error, code: sbResult.code });
       }
+      supabaseWarning = sbResult.error;
+      supabaseFailureCode = sbResult.code;
       // If no fallback auth store exists, return the Supabase auth error immediately
       if (!isEnvAdminConfigured()) {
         try {
@@ -517,10 +548,10 @@ app.post('/api/admin/login', async (req, res) => {
             .from(adminCredentials)
             .where(eq(adminCredentials.slotKey, 'primary'));
           if (existing.length === 0) {
-            return res.status(sbResult.status).json({ error: sbResult.error });
+            return res.status(sbResult.status).json({ error: sbResult.error, code: sbResult.code });
           }
         } catch {
-          return res.status(sbResult.status).json({ error: sbResult.error });
+          return res.status(sbResult.status).json({ error: sbResult.error, code: sbResult.code });
         }
       }
     }
@@ -551,7 +582,13 @@ app.post('/api/admin/login', async (req, res) => {
         : false;
 
       if (!userMatched || !passMatched) {
-        return res.status(401).json({ error: 'Invalid username or password.' });
+        return res.status(401).json({
+          error:
+            supabaseFailureCode === 'email_not_confirmed' && supabaseWarning
+              ? supabaseWarning
+              : 'Invalid username or password.',
+          code: supabaseFailureCode,
+        });
       }
 
       const sessionUser = {
@@ -560,9 +597,16 @@ app.post('/api/admin/login', async (req, res) => {
         email: expectedEmail,
         role: 'admin' as const,
         provider: 'env' as const,
+        appUrl: configuredAppUrl || undefined,
+        emailMatchesAdminEmail: isConfiguredAdminEmail(expectedEmail),
       };
       const token = signAdminToken(sessionUser);
-      return res.json({ token, user: sessionUser });
+      return res.json({
+        token,
+        user: sessionUser,
+        supabaseWarning,
+        appUrlValidated: !configuredAppUrl || sessionUser.appUrl === configuredAppUrl,
+      });
     }
 
     // 3. Database-stored scrypt credentials if already configured
@@ -586,7 +630,13 @@ app.post('/api/admin/login', async (req, res) => {
     const passMatched = verifyPassword(pass, record.passwordHash);
 
     if (!userMatched || !passMatched) {
-      return res.status(401).json({ error: 'Invalid username or password.' });
+      return res.status(401).json({
+        error:
+          supabaseFailureCode === 'email_not_confirmed' && supabaseWarning
+            ? supabaseWarning
+            : 'Invalid username or password.',
+        code: supabaseFailureCode,
+      });
     }
 
     const sessionUser = {
@@ -595,9 +645,16 @@ app.post('/api/admin/login', async (req, res) => {
       email: record.email,
       role: 'admin' as const,
       provider: 'database' as const,
+      appUrl: configuredAppUrl || undefined,
+      emailMatchesAdminEmail: isConfiguredAdminEmail(record.email),
     };
     const token = signAdminToken(sessionUser);
-    return res.json({ token, user: sessionUser });
+    return res.json({
+      token,
+      user: sessionUser,
+      supabaseWarning,
+      appUrlValidated: !configuredAppUrl || sessionUser.appUrl === configuredAppUrl,
+    });
   } catch (error) {
     console.error('Admin login error:', error);
     return res.status(500).json({ error: 'Unable to sign in right now.' });
@@ -659,14 +716,21 @@ app.post('/api/admin/change-password', requireAdmin, async (req, res) => {
   }
 });
 
-// Authenticated user status
+// Authenticated user status & APP_URL session validation
 app.get('/api/auth/me', requireAuth, (req: AuthRequest, res) => {
+  const configuredAppUrl = getConfiguredAppUrl();
+  const requestOrigin = getRequestAppOrigin(req);
   res.json({
     uid: req.dbUser?.uid,
     email: req.dbUser?.email,
     name: req.dbUser?.name,
     role: req.dbUser?.role,
     provider: req.dbUser?.provider,
+    appUrl: req.dbUser?.appUrl || null,
+    configuredAppUrl: configuredAppUrl || null,
+    requestOrigin: requestOrigin || null,
+    appUrlValidated: !configuredAppUrl || req.dbUser?.appUrl === configuredAppUrl,
+    emailMatchesAdminEmail: Boolean(req.dbUser?.emailMatchesAdminEmail),
   });
 });
 
@@ -1172,6 +1236,10 @@ async function startServer() {
     });
     const distDir = path.resolve(__dirname, 'dist');
     app.use(express.static(distDir));
+    app.use(
+      '/src/assets',
+      express.static(path.resolve(__dirname, 'src/assets'), { maxAge: '30d' })
+    );
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distDir, 'index.html'));
     });

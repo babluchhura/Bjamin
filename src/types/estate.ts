@@ -112,6 +112,9 @@ export interface AdminAuthConfig {
   supabaseConfigured: boolean;
   envCredentialsConfigured: boolean;
   databaseUrlConfigured: boolean;
+  appUrl?: string;
+  appUrlConfigured?: boolean;
+  adminEmailConfigured?: boolean;
 }
 
 export interface AdminUser {
@@ -120,4 +123,6 @@ export interface AdminUser {
   email: string;
   role: 'admin';
   provider: 'supabase' | 'env' | 'database';
+  appUrl?: string;
+  emailMatchesAdminEmail?: boolean;
 }

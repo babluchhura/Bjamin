@@ -13,10 +13,12 @@ import type {
 } from '../types/estate';
 
 async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
+  const appOrigin = typeof window !== 'undefined' ? window.location.origin : '';
   const res = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
+      ...(appOrigin ? { 'X-App-Url': appOrigin } : {}),
       ...(options?.headers || {}),
     },
   });
@@ -58,6 +60,7 @@ export const api = {
       googleMapsApiKey: string;
       supabaseUrl?: string;
       supabaseAnonKey?: string;
+      appUrl?: string;
     }>('/api/public-config'),
   getSettings: () => requestJson<SiteSettingsMap>('/api/settings'),
   getPlots: (filters?: PlotFilters) => {
@@ -118,7 +121,12 @@ export const api = {
     password?: string;
     supabaseAccessToken?: string;
   }) =>
-    requestJson<{ token: string; user: AdminUser }>('/api/admin/login', {
+    requestJson<{
+      token: string;
+      user: AdminUser;
+      supabaseWarning?: string;
+      appUrlValidated?: boolean;
+    }>('/api/admin/login', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -132,12 +140,20 @@ export const api = {
       body: JSON.stringify(data),
     }),
   getMe: (token: string) =>
-    requestJson<{ uid: string; email: string; name: string | null; role: string }>(
-      '/api/auth/me',
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      }
-    ),
+    requestJson<{
+      uid: string;
+      email: string;
+      name: string | null;
+      role: string;
+      provider: string;
+      appUrl: string | null;
+      configuredAppUrl: string | null;
+      requestOrigin: string | null;
+      appUrlValidated: boolean;
+      emailMatchesAdminEmail: boolean;
+    }>('/api/auth/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
   getAdminStats: (token: string) =>
     requestJson<AdminStats>('/api/admin/stats', {
       headers: { Authorization: `Bearer ${token}` },

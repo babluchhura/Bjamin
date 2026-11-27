@@ -20,6 +20,7 @@ import {
   formatHectares,
   hectaresToDecimals,
 } from '../lib/api';
+import { getSupabaseClient } from '../lib/supabase';
 import type {
   AdminStats,
   InquiryItem,
@@ -87,6 +88,8 @@ export const AdminDashboardPage: React.FC = () => {
     authToken,
     userRole,
     authConfig,
+    sessionValidation,
+    supabaseConfig,
     authLoading,
     authError,
     loginAdmin,
@@ -163,6 +166,159 @@ export const AdminDashboardPage: React.FC = () => {
       void loadAdminData();
     }
   }, [authToken, userRole, loadAdminData]);
+
+  // Diagnostic logging for Admin session email, permissions, Supabase session, and APP_URL validation
+  useEffect(() => {
+    let cancelled = false;
+
+    const inspectSessionDiagnostics = async () => {
+      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+      const configuredAppUrl = authConfig?.appUrl || sessionValidation?.configuredAppUrl || null;
+
+      console.info('[AdminDashboardPage] Auth configuration check:', {
+        authMode: authConfig?.authMode,
+        supabaseConfigured: authConfig?.supabaseConfigured,
+        envCredentialsConfigured: authConfig?.envCredentialsConfigured,
+        adminEmailConfigured: authConfig?.adminEmailConfigured,
+        appUrlConfigured: authConfig?.appUrlConfigured,
+        configuredAppUrl,
+        currentOrigin,
+      });
+
+      const sb = getSupabaseClient(supabaseConfig?.url, supabaseConfig?.anonKey);
+      if (sb) {
+        try {
+          const { data } = await sb.auth.getSession();
+          const sbUser = data.session?.user;
+          if (!cancelled && sbUser) {
+            const hasEmail = Boolean(sbUser.email);
+            const hasConfirmedEmail = Boolean(sbUser.email_confirmed_at);
+            const sbRole =
+              (sbUser.app_metadata?.role as string | undefined) ||
+              (sbUser.user_metadata?.role as string | undefined) ||
+              null;
+
+            if (!hasEmail || !hasConfirmedEmail) {
+              console.warn('[AdminDashboardPage] Supabase session missing confirmed email:', {
+                uid: sbUser.id,
+                email: sbUser.email || null,
+                emailConfirmedAt: sbUser.email_confirmed_at || null,
+              });
+            }
+            if (sbRole && sbRole !== 'admin') {
+              console.warn(
+                '[AdminDashboardPage] Supabase session metadata lacks admin role:',
+                { email: sbUser.email, role: sbRole }
+              );
+            }
+          }
+        } catch (err) {
+          console.warn('[AdminDashboardPage] Failed to inspect Supabase session:', err);
+        }
+      }
+
+      if (!authUser || !authToken) {
+        console.info('[AdminDashboardPage] No active admin session in memory.');
+        return;
+      }
+
+      if (!authUser.email) {
+        console.error(
+          '[AdminDashboardPage] Active user session is missing an email address required for ADMIN_EMAIL verification.',
+          { uid: authUser.uid, provider: authUser.provider }
+        );
+      } else if (
+        authConfig?.adminEmailConfigured &&
+        sessionValidation &&
+        !sessionValidation.emailMatchesAdminEmail
+      ) {
+        console.warn(
+          '[AdminDashboardPage] Session email does not match configured ADMIN_EMAIL (relying on profile/env role check):',
+          {
+            email: authUser.email,
+            provider: authUser.provider,
+            role: userRole,
+          }
+        );
+      }
+
+      if (userRole !== 'admin') {
+        console.error(
+          '[AdminDashboardPage] Current user session is missing required "admin" role permissions:',
+          {
+            email: authUser.email || null,
+            role: userRole || 'none',
+            provider: authUser.provider,
+          }
+        );
+      }
+
+      if (sessionValidation?.supabaseWarning) {
+        console.warn(
+          '[AdminDashboardPage] Supabase authentication warning (fallback provider used):',
+          {
+            provider: authUser.provider,
+            warning: sessionValidation.supabaseWarning,
+          }
+        );
+      }
+
+      try {
+        const me = await api.getMe(authToken);
+        if (cancelled) return;
+
+        if (!me.email) {
+          console.error('[AdminDashboardPage] Server session check: missing user email.');
+        } else if (authConfig?.adminEmailConfigured && !me.emailMatchesAdminEmail) {
+          console.warn(
+            '[AdminDashboardPage] Server session check: session email is not listed in ADMIN_EMAIL.',
+            { email: me.email, provider: me.provider }
+          );
+        }
+
+        if (me.role !== 'admin') {
+          console.error(
+            '[AdminDashboardPage] Server session check: missing required admin permissions.',
+            { email: me.email, role: me.role }
+          );
+        }
+
+        if (me.configuredAppUrl && !me.appUrlValidated) {
+          console.error(
+            '[AdminDashboardPage] Session APP_URL validation FAILED:',
+            {
+              tokenAppUrl: me.appUrl,
+              configuredAppUrl: me.configuredAppUrl,
+              currentOrigin,
+            }
+          );
+        } else {
+          console.info('[AdminDashboardPage] Session validated against APP_URL:', {
+            email: me.email,
+            role: me.role,
+            provider: me.provider,
+            emailMatchesAdminEmail: me.emailMatchesAdminEmail,
+            configuredAppUrl: me.configuredAppUrl,
+            tokenAppUrl: me.appUrl,
+            currentOrigin,
+            appUrlValidated: me.appUrlValidated,
+          });
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.error(
+            '[AdminDashboardPage] Server APP_URL/session validation request failed:',
+            err
+          );
+        }
+      }
+    };
+
+    void inspectSessionDiagnostics();
+    return () => {
+      cancelled = true;
+    };
+  }, [authConfig, authToken, authUser, sessionValidation, supabaseConfig, userRole]);
 
   const openNewPlot = () => {
     setEditingPlotId(null);
@@ -387,7 +543,16 @@ export const AdminDashboardPage: React.FC = () => {
       await loginAdmin(loginUsername.trim(), loginPassword);
       setLoginPassword('');
     } catch (err) {
-      setLoginError(err instanceof Error ? err.message : 'Invalid username or password.');
+      const message = err instanceof Error ? err.message : 'Invalid username or password.';
+      console.error('[AdminDashboardPage] Admin authentication failed:', {
+        identifier: loginUsername.trim(),
+        supabaseConfigured: authConfig?.supabaseConfigured,
+        adminEmailConfigured: authConfig?.adminEmailConfigured,
+        configuredAppUrl: authConfig?.appUrl || null,
+        currentOrigin: typeof window !== 'undefined' ? window.location.origin : null,
+        reason: message,
+      });
+      setLoginError(message);
     }
   };
 
@@ -435,23 +600,15 @@ export const AdminDashboardPage: React.FC = () => {
       <div className="max-w-md mx-auto px-4 py-16">
         <form
           onSubmit={handleLoginSubmit}
-          className="bg-white border border-[#E2E8E5] rounded-lg p-8 space-y-5"
+          className="bg-white rounded-lg p-8 space-y-5"
         >
           <div className="text-center space-y-2">
             <div className="w-12 h-12 mx-auto rounded-md bg-[#0B281F] text-[#D1AA48] flex items-center justify-center">
               <Lock className="w-5 h-5" />
             </div>
-            <p className="text-xs font-mono text-[#9E7822]">
-              {authConfig?.supabaseConfigured
-                ? 'Supabase Authentication Active'
-                : 'Protected Admin Access'}
-            </p>
             <h1 className="font-display text-3xl font-semibold text-[#0B281F]">
               Administrator Login
             </h1>
-            <p className="text-xs text-[#4B635A] leading-relaxed">
-              Enter your Admin Username (or Email) and Password to unlock the Estate Admin Panel.
-            </p>
           </div>
 
           {authConfig && !authConfig.credentialsReady && (
